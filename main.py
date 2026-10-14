@@ -126,7 +126,27 @@ def send_to_telegram(token: str, chat_id: str, message: str) -> None:
     try:
         response = json.loads(_read_url(endpoint, data=data))
     except urllib.error.HTTPError as exc:
-        raise RuntimeError(f"Telegram API rejected request (HTTP {exc.code}); check your bot token and chat ID") from None
+        # Telegram error descriptions are untrusted. Map common cases to safe
+        # messages rather than logging the response, URL, chat ID or bot token.
+        try:
+            detail = json.loads(exc.read().decode("utf-8")).get("description", "").lower()
+        except (UnicodeDecodeError, ValueError, AttributeError):
+            detail = ""
+        if "chat not found" in detail:
+            reason = "Chat not found. Check TELEGRAM_CHAT_ID and press Start in your bot chat."
+        elif "chat_id is empty" in detail or "chat_id is not valid" in detail:
+            reason = "Invalid or empty chat ID. Save your numeric ID in GitHub Secrets."
+        elif "can't parse entities" in detail:
+            reason = "Telegram could not parse the HTML message."
+        elif "bot was blocked" in detail:
+            reason = "The recipient blocked the bot. Unblock it and press Start."
+        elif "message is too long" in detail:
+            reason = "Telegram message is too long."
+        elif exc.code == 401:
+            reason = "Unauthorized bot token. Check TELEGRAM_BOT_TOKEN."
+        else:
+            reason = "Check the recipient chat ID and message formatting."
+        raise RuntimeError(f"Telegram API HTTP {exc.code}: {reason}") from None
     if not response.get("ok"):
         raise RuntimeError("Telegram API reported a failed send; check your bot token and chat ID")
 

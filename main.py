@@ -124,6 +124,21 @@ def make_message(today: Rate, previous: Rate | None) -> str:
     return "\n".join(parts)
 
 
+def get_bot_username(token: str) -> str:
+    """Check the Telegram bot identity without exposing its token."""
+    endpoint = f"{TELEGRAM_ENDPOINT}/bot{urllib.parse.quote(token, safe=':')}/getMe"
+    try:
+        data = json.loads(_read_url(endpoint))
+    except urllib.error.HTTPError as exc:
+        raise RuntimeError(f"Telegram getMe HTTP {exc.code}; check TELEGRAM_BOT_TOKEN") from None
+    if not data.get("ok"):
+        raise RuntimeError("Telegram getMe returned an unsuccessful response")
+    username = data.get("result", {}).get("username", "")
+    if not isinstance(username, str) or not username.isascii() or not username.replace("_", "").isalnum():
+        raise RuntimeError("Telegram getMe did not return a valid username")
+    return username
+
+
 def send_to_telegram(token: str, chat_id: str, message: str) -> None:
     # Secret only in the URL used locally; never print the URL or HTTP response.
     endpoint = f"{TELEGRAM_ENDPOINT}/bot{urllib.parse.quote(token, safe=':')}/sendMessage"
@@ -146,7 +161,11 @@ def send_to_telegram(token: str, chat_id: str, message: str) -> None:
         elif "can't parse entities" in detail:
             reason = "Telegram could not parse the HTML message."
         elif "bot was blocked" in detail:
-            reason = "The recipient blocked the bot. Unblock it and press Start."
+            reason = "The recipient blocked this bot. Unblock it and press Start."
+        elif "can't initiate conversation" in detail or "cannot initiate conversation" in detail or "bot can't initiate" in detail:
+            reason = "The bot cannot initiate a conversation. Open this exact bot and press Start."
+        elif "bots can't send messages to bots" in detail:
+            reason = "The recipient ID belongs to a bot, not a personal account."
         elif "message is too long" in detail:
             reason = "Telegram message is too long."
         elif exc.code == 401:
@@ -169,8 +188,11 @@ def main() -> int:
     current_day = datetime.now(TIME_ZONE).date()
     if os.getenv("TEST_DATE"):
         current_day = date.fromisoformat(os.environ["TEST_DATE"])
-    stage = "loading the current NBRK rate"
+    stage = "verifying Telegram bot identity"
     try:
+        bot_username = get_bot_username(token)
+        LOG.info("Telegram token belongs to @%s. Press Start in this exact bot.", bot_username)
+        stage = "loading the current NBRK rate"
         current = get_recent_rate(current_day)
         LOG.info("Loaded current official NBRK rate for %s", current.for_date.isoformat())
         stage = "loading the previous NBRK rate"

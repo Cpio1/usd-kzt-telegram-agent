@@ -1,0 +1,26 @@
+name: Daily USD/KZT Telegram rate
+
+on:
+  schedule:
+    # Every day at 12:00 Kazakhstan time (UTC+5)
+    - cron: '0 12 * * *'
+      timezone: 'Asia/Almaty'
+  workflow_dispatch:  # Manual test in Actions tab
+
+permissions:
+  contents: read
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Fetch official NBRK USD/KZT rate and send message
+        run: python main.py
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}

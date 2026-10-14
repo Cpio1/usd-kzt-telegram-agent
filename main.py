@@ -32,10 +32,17 @@ class Rate:
 
 def _read_url(url: str, *, data: bytes | None = None, timeout: int = 20) -> bytes:
     """Fetch HTTPS data, retrying transient transport/server errors."""
+    headers = {
+        "User-Agent": "USD-KZT-Telegram-Digest/1.0",
+        "Accept": "application/xml,application/json,*/*",
+    }
+    if data is not None:
+        # Telegram sendMessage body is JSON, not form-encoded data.
+        headers["Content-Type"] = "application/json; charset=utf-8"
     req = urllib.request.Request(
         url,
         data=data,
-        headers={"User-Agent": "USD-KZT-Telegram-Digest/1.0", "Accept": "application/xml,application/json,*/*"},
+        headers=headers,
         method="POST" if data is not None else "GET",
     )
     for attempt in range(3):
